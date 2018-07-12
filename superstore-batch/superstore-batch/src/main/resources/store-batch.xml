@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans:beans xmlns="http://www.springframework.org/schema/batch"
+	xmlns:beans="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+           http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd
+           http://www.springframework.org/schema/batch
+           http://www.springframework.org/schema/batch/spring-batch.xsd">
+           
+    <beans:import resource="classpath:store-datasource.xml" />
+	<beans:import resource="classpath:store-beans.xml" />
+	
+	<job id="ioSampleJob">
+		<step id="step1" next="step2">
+			<tasklet transaction-manager="transactionManager">
+				<chunk reader="cvsFileItemReader" writer="mySqlItemWriter"
+					processor="itemProcessor" commit-interval="2" />
+			</tasklet>
+		</step>
+		
+		<step id="step2" next="step3">
+			<tasklet transaction-manager="transactionManager">
+				<chunk reader="cvsFileItemReader1" writer="mySqlItemWriter1"
+					processor="statusProcessor" commit-interval="2" />
+			</tasklet>
+		</step>
+		
+		<step id="step3">
+			<tasklet transaction-manager="transactionManager">
+				<chunk reader="cvsFileItemReader2" writer="mySqlItemWriter2"
+					processor="managerProcessor" commit-interval="2" />
+			</tasklet>
+		</step>
+	</job>
+	
+	<beans:bean id="dateEditor"
+		class="org.springframework.beans.propertyeditors.CustomDateEditor">
+		<beans:constructor-arg>
+			<beans:bean class="java.text.SimpleDateFormat">
+				<beans:constructor-arg value="MM-dd-yyyy" />
+			</beans:bean>
+		</beans:constructor-arg>
+		<beans:constructor-arg value="true" />
+	</beans:bean>
+	
+	<beans:bean id="cvsFileItemReader"
+		class="org.springframework.batch.item.file.FlatFileItemReader">
+		<beans:property name="resource" value="classpath:Orders.csv" />
+		<!-- linesToSkip => The number of lines to skip at the beginning of the 
+    	file. This feature is particularly useful to handle file headers. -->
+		<beans:property name="linesToSkip" value="1" />
+		<beans:property name="lineMapper">
+			<beans:bean
+				class="org.springframework.batch.item.file.mapping.DefaultLineMapper">
+				<beans:property name="lineTokenizer">
+					<beans:bean
+						class="org.springframework.batch.item.file.transform.DelimitedLineTokenizer">
+						<beans:property name="names" value="RowId,OrderId,OrderDate,OrderPriority,OrderQuantity,Sales,Discount,ShipMode,Profit,UnitPrice,ShippingCost,CustomerName,Province,Region,CustomerSegment,CreditCardNo,ProductCategory,ProductSubCategory,ProductName,ProductContainer,ProductBaseMargin,ShipDate"/>
+					</beans:bean>
+				</beans:property>
+				<beans:property name="fieldSetMapper">
+					<beans:bean	class="org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper">
+						<beans:property name="prototypeBeanName" value="order" />
+						<beans:property name="customEditors">
+							<beans:map>
+								<beans:entry key="java.util.Date">
+									<beans:ref bean="dateEditor" />
+								</beans:entry>
+							</beans:map>
+						</beans:property>
+					</beans:bean>
+				</beans:property>
+			</beans:bean>
+		</beans:property>
+	</beans:bean>
+	
+	<beans:bean id="mySqlItemWriter" class="org.springframework.batch.item.database.JdbcBatchItemWriter">
+		<beans:property name="dataSource" ref="dataSource" />
+		<beans:property name="sql">
+			<beans:value>
+	            <![CDATA[
+	            	insert into orderdb(rowid,orderid,orderdate,orderpriority,orderquantity,sales,discount,shipmode,profit,unitprice,shippingcost,customername,province,region,customersegment,creditcardno,productcategory,productsubcategory,productname,productcontainer,productbasemargin,shipdate)
+	            				values(:RowId,:OrderId,:OrderDate,:OrderPriority,:OrderQuantity,:Sales,:Discount,:ShipMode,:Profit,:UnitPrice,:ShippingCost,:CustomerName,:Province,:Region,:CustomerSegment,:CreditCardNo,:ProductCategory,:ProductSubCategory,:ProductName,:ProductContainer,:ProductBaseMargin,:ShipDate)
+	            				
+	            ]]>
+			</beans:value>
+		</beans:property>
+		<beans:property name="itemSqlParameterSourceProvider">
+			<beans:bean
+				class="org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider" />
+		</beans:property>
+	</beans:bean>
+	
+	<beans:bean id="cvsFileItemReader1"
+		class="org.springframework.batch.item.file.FlatFileItemReader">
+		<beans:property name="resource" value="classpath:Returns.csv" />
+		<!-- linesToSkip => The number of lines to skip at the beginning of the 
+    	file. This feature is particularly useful to handle file headers. -->
+		<beans:property name="linesToSkip" value="1" />
+		<beans:property name="lineMapper">
+			<beans:bean
+				class="org.springframework.batch.item.file.mapping.DefaultLineMapper">
+				<beans:property name="lineTokenizer">
+					<beans:bean
+						class="org.springframework.batch.item.file.transform.DelimitedLineTokenizer">
+						<beans:property name="names" value="OrderId,Stat"/>
+					</beans:bean>
+				</beans:property>
+				<beans:property name="fieldSetMapper">
+					<beans:bean	class="org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper">
+						<beans:property name="prototypeBeanName" value="orderstatus" />
+					</beans:bean>
+				</beans:property>
+			</beans:bean>
+		</beans:property>
+	</beans:bean>
+	
+	<beans:bean id="mySqlItemWriter1" class="org.springframework.batch.item.database.JdbcBatchItemWriter">
+		<beans:property name="dataSource" ref="dataSource" />
+		<beans:property name="sql">
+			<beans:value>
+	            <![CDATA[
+	            	Insert into returnedorders(orderid, orderstatus)
+	            	values(:OrdId, :OrdStat)
+	            				
+	            ]]>
+			</beans:value>
+		</beans:property>
+		<beans:property name="itemSqlParameterSourceProvider">
+			<beans:bean
+				class="org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider" />
+		</beans:property>
+	</beans:bean>
+	
+	<beans:bean id="cvsFileItemReader2"
+		class="org.springframework.batch.item.file.FlatFileItemReader">
+		<beans:property name="resource" value="classpath:Users.csv" />
+		<!-- linesToSkip => The number of lines to skip at the beginning of the 
+    	file. This feature is particularly useful to handle file headers. -->
+		<beans:property name="linesToSkip" value="1" />
+		<beans:property name="lineMapper">
+			<beans:bean
+				class="org.springframework.batch.item.file.mapping.DefaultLineMapper">
+				<beans:property name="lineTokenizer">
+					<beans:bean
+						class="org.springframework.batch.item.file.transform.DelimitedLineTokenizer">
+						<beans:property name="names" value="Region,Manager"/>
+					</beans:bean>
+				</beans:property>
+				<beans:property name="fieldSetMapper">
+					<beans:bean	class="org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper">
+						<beans:property name="prototypeBeanName" value="managers" />
+					</beans:bean>
+				</beans:property>
+			</beans:bean>
+		</beans:property>
+	</beans:bean>
+	
+	<beans:bean id="mySqlItemWriter2" class="org.springframework.batch.item.database.JdbcBatchItemWriter">
+		<beans:property name="dataSource" ref="dataSource" />
+		<beans:property name="sql">
+			<beans:value>
+	            <![CDATA[
+	            	Insert into regionalmanagers(region, manager)
+	            	values(:Region, :Manager)
+	            				
+	            ]]>
+			</beans:value>
+		</beans:property>
+		<beans:property name="itemSqlParameterSourceProvider">
+			<beans:bean
+				class="org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider" />
+		</beans:property>
+	</beans:bean>
+	
+	<beans:bean id="jobRepository"
+		class="org.springframework.batch.core.repository.support.JobRepositoryFactoryBean">
+		<beans:property name="dataSource" ref="dataSource" />
+		<beans:property name="transactionManager" ref="transactionManager" />
+		<beans:property name="databaseType" value="mysql" />
+	</beans:bean>
+
+	<beans:bean id="transactionManager"
+		class="org.springframework.batch.support.transaction.ResourcelessTransactionManager" />
+
+	<beans:bean id="jobLauncher"
+		class="org.springframework.batch.core.launch.support.SimpleJobLauncher">
+		<beans:property name="jobRepository" ref="jobRepository" />
+	</beans:bean>
+	
+</beans:beans>
